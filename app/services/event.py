@@ -29,10 +29,11 @@ class EventService:
     def delete_file(self, file_url: str):
         """Delete a file from local storage based on its URL"""
         if not file_url:
-            return
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="File not found."
+            )
         try:
-            # file_url might be "/static/event_banners/old.png"
-            # or "http://localhost:8000/static/event_banners/old.png"
             file_name = file_url.split("/")[-1]
             file_path = os.path.join(settings.MEDIA_DIR, "event_banners", file_name)
             if os.path.exists(file_path):

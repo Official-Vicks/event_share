@@ -61,6 +61,12 @@ class AdminService:
     
     def register_user(self, user_data: AdminRegister):
         existing_user = self.db.query(User).filter_by(email=user_data.email).first()
+        existing_username = self.db.query(User).filter_by(username=user_data.username).first()
+        if existing_username:
+            return self.GenerateResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                message="Username already taken."
+            )
         if existing_user:
             return self.GenerateResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,

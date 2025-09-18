@@ -9,6 +9,7 @@ from config import settings
 from fastapi.staticfiles import StaticFiles
 import os
 import app.models
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 os.makedirs(os.path.join(settings.MEDIA_DIR, "avi"), exist_ok=True)
@@ -25,3 +26,11 @@ app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(event_router)
 app.include_router(moments_router)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],  # frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)

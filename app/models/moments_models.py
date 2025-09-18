@@ -31,3 +31,4 @@ class Moment(Base):
 
     event = relationship("Events", back_populates="moments")
     user = relationship("User", back_populates="moments")
+
