@@ -1,18 +1,17 @@
 from logging.config import fileConfig
-import os
-from dotenv import load_dotenv
+from config import settings
 
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 
 # Import Base from your db.py so Alembic knows your models
 from db import Base
+import app.models
 
 # -------------------------------
 # Load .env and set DB URL
 # -------------------------------
-load_dotenv()
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = settings.DATABASE_URL
 
 config = context.config
 config.set_main_option("sqlalchemy.url", DATABASE_URL)

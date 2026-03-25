@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_MINUTES: int
     DATABASE_URL: str
     MEDIA_DIR: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
+    MOMENT_MEDIA_DIR: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "media")
 
     class Config:
         env_file = ".env"

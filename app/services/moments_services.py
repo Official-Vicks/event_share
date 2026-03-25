@@ -5,8 +5,10 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException, status, UploadFile
 from uuid import UUID
 from datetime import datetime
-from app.models.event_models import Events
+from app.models.event_models import Event, EventParticipant
 from app.models.user_models import User
+from app.utils.file_upload import save_file
+from config import settings
 import os, shutil, uuid
 
 class MomentService():
@@ -21,7 +23,8 @@ class MomentService():
         }
     
     def create_moment(self, moment_data: MomentBase, user: User, token: str, media_file: UploadFile = None):
-        event = self.db.query(Events).filter(Events.id == moment_data.event_id).first()
+        event = self.db.query(Event).filter(Event.id == moment_data.event_id).first()
+        joinedParticipant = self.db.query(EventParticipant).filter(EventParticipant.event_id == moment_data.event_id).first()
         if user.role != "participant":
             return self.GenerateResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -31,6 +34,11 @@ class MomentService():
             return self.GenerateResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
                 message="Event not found."
+            )
+        if not joinedParticipant or joinedParticipant.status != "joined":
+            return self.GenerateResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                message="Join an event to create moments."
             )
         if moment_data.type in [ "image", "video"] and not media_file:
             return self.GenerateResponse(
@@ -51,13 +59,10 @@ class MomentService():
                     status_code=status.HTTP_400_BAD_REQUEST,
                     message="Unsupported media file type."
                 )
-            unique_filename = f"{uuid.uuid4()}{file_extension}"
-            upload_dir = os.path.join("media", "moments")
-            os.makedirs(upload_dir, exist_ok=True)
-            file_path = os.path.join(upload_dir, unique_filename)
-            with open(file_path, "wb") as buffer:
-                shutil.copyfileobj(media_file.file, buffer)
-            media_url = f"/static/moments/{unique_filename}"
+
+            upload_dir = os.path.join(settings.MOMENT_MEDIA_DIR, "moments")
+
+            media_url = save_file(media_file, upload_dir)
             moment_data.media_url = media_url
         new_moment = Moment(
             id=uuid.uuid4(),
@@ -76,11 +81,11 @@ class MomentService():
         return self.GenerateResponse(
             status_code=status.HTTP_201_CREATED,
             message="Moment created successfully.",
-            data=MomentResponse.from_orm(new_moment)
+            data=MomentResponse.model_validate(new_moment)
         )
 
     def get_moments_by_event(self, event_id: UUID):
-        event = self.db.query(Events).filter(Events.id == event_id).first()
+        event = self.db.query(Event).filter(Event.id == event_id).first()
         if not event:
             return self.GenerateResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -90,7 +95,7 @@ class MomentService():
         return self.GenerateResponse(
             status_code=status.HTTP_200_OK,
             message="Moments retrieved successfully.",
-            data=[MomentResponse.from_orm(moment) for moment in moments]
+            data=[MomentResponse.model_validate(moment) for moment in moments]
         )
     
     def update_moment(self, id: UUID, moment_data: MomentUpdate, user: User, token: str, media_file: UploadFile = None):
@@ -124,20 +129,17 @@ class MomentService():
                     status_code=status.HTTP_400_BAD_REQUEST,
                     message="Unsupported media file type."
                 )
-            unique_filename = f"{uuid.uuid4()}{file_extension}"
-            upload_dir = os.path.join("media", "moments")
-            os.makedirs(upload_dir, exist_ok=True)
-            file_path = os.path.join(upload_dir, unique_filename)
-            with open(file_path, "wb") as buffer:
-                shutil.copyfileobj(media_file.file, buffer)
-            moment.media_url = f"/static/moments/{unique_filename}"
+
+            upload_dir = os.path.join(settings.MOMENT_MEDIA_DIR, "moments")
+
+            moment.media_url = save_file(media_file, upload_dir)
 
         self.db.commit()
         self.db.refresh(moment)
         return self.GenerateResponse(
             status_code=status.HTTP_200_OK,
             message="Moment updated successfully.",
-            data=MomentResponse.from_orm(moment)
+            data=MomentResponse.model_validate(moment)
         )
 
     def get_moment_by_id(self, id: UUID):
@@ -151,7 +153,7 @@ class MomentService():
         return self.GenerateResponse(
             status_code=status.HTTP_200_OK,
             message="Moment retrieved successfully.",
-            data=MomentResponse.from_orm(moment)
+            data=MomentResponse.model_validate(moment)
         )
 
     def delete_moment(self, id:UUID, user: User, token: str):

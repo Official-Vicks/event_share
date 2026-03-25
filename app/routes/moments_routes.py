@@ -48,7 +48,7 @@ def get_moments_by_events(
     db: Session = Depends(get_db),
 ):
     service = MomentService(db)
-    response = service.get_moments_by_event(event_id)
+    response = service.get_moments_by_event(uuid.UUID(event_id))
     if response["status_code"] != status.HTTP_200_OK:
         raise HTTPException(
             status_code=response["status_code"],
@@ -91,14 +91,14 @@ def update_moment(
 
 @router.get("/mymoment/{id}", response_model=GenericResponseModel[MomentResponse])
 def get_my_moment(
-    id: uuid.UUID,
+    id: str,
     db: Session = Depends(get_db),
     request: Request = None
 ):
     service = MomentService(db)
     user_service = UserService(db)
     user = user_service.get_current_user(db=db)
-    response = service.get_moment_by_id(id)
+    response = service.get_moment_by_id(uuid.UUID(id))
     if response["status_code"] != status.HTTP_200_OK:
         raise HTTPException(
             status_code=response["status_code"],
@@ -110,7 +110,7 @@ def get_my_moment(
         data=response["data"]
     )
 
-@router.delete("/{id}/delete", response_class=GenericResponseModel[None])
+@router.delete("/{id}/delete", response_model=GenericResponseModel[None])
 def delete_moment(
     id: uuid.UUID,
     db: Session = Depends(get_db),

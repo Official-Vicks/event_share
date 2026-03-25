@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Form, File, UploadFile, status
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, List
 from fastapi import Request
 from app.services.event import EventService
 from app.schemas.event_schema import EventUpdate, EventResponse, EventBase, EventUpdateResponse
@@ -17,7 +17,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 def create_event(
     name: str = Form(...),
     description: Optional[str] = Form(None),
-    scheduled_at: str = Form(...),
+    scheduled_at: datetime = Form(...),
     location: Optional[str] = Form(None),
     banner_file: Optional[UploadFile] = File(None),
     token: str = Depends(oauth2_scheme),
@@ -41,7 +41,7 @@ def update_event(
     event_id: str,
     name: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
-    scheduled_at: Optional[str] = Form(None),  # keep same type as create_event
+    scheduled_at: Optional[datetime] = Form(None),  # keep same type as create_event
     location: Optional[str] = Form(None),
     banner_file: Optional[UploadFile] = File(None),  # match service
     token: str = Depends(oauth2_scheme),
@@ -55,7 +55,7 @@ def update_event(
         location=location,
     )
     service = EventService(db)
-    return service.update_event(event_id, event_data, token, banner_file, request)
+    return service.update_event(uuid.UUID(event_id), event_data, token, banner_file, request)
 
 @router.get(
     "/{event_id}",
@@ -67,11 +67,11 @@ def get_event(
     db: Session = Depends(get_db)
 ):
     service = EventService(db)
-    return service.get_single_event(event_id, token)
+    return service.get_single_event(uuid.UUID(event_id), token)
 
 @router.get(
     "/event_manager/all",
-    response_model=GenericResponseModel[list[EventResponse]]
+    response_model=GenericResponseModel[List[EventResponse]]
 )
 def get_all_events(
     token: str = Depends(oauth2_scheme),

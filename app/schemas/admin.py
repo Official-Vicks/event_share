@@ -37,7 +37,7 @@ class AdminProfileResponse(AdminProfileModel):
     id: UUID
     email: EmailStr
     role: AdminRole
-    full_name: str
+    full_name: Optional[str] = None
     username: str
     avi: Optional[str] = None
     is_active: bool

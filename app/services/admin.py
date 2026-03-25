@@ -21,6 +21,7 @@ from fastapi import UploadFile
 from security import hash_password, verify_password
 from app.schemas.admin import AdminRegister, AdminLogin, AdminProfileModel, AdminAuthResponse, AdminGetUserProfileOut
 from fastapi.encoders import jsonable_encoder
+from app.utils.file_upload import save_file
 
 class AdminService:
     def __init__(self,db: Session):
@@ -46,7 +47,7 @@ class AdminService:
                 detail="Invalid authentication credentials."
             )
 
-        user = db.query(User).filter(User.id == user_id).first()
+        user = db.query(User).filter(User.id == uuid.UUID(user_id)).first()
         if user is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -72,7 +73,7 @@ class AdminService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 message="User with this email already exists."
             )
-        user_id=str(uuid.uuid4())
+        user_id= uuid.uuid4()
         new_user = User(
             id=user_id,
             username=user_data.username,
@@ -84,8 +85,8 @@ class AdminService:
         self.db.commit()
         self.db.refresh(new_user)
 
-        access_token = create_access_token({"sub": user_id})
-        refresh_token = create_refresh_token({"sub": user_id})
+        access_token = create_access_token({"sub": str(user_id)})
+        refresh_token = create_refresh_token({"sub": str(user_id)})
 
         return self.GenerateResponse(
             status_code=status.HTTP_201_CREATED,
@@ -145,16 +146,16 @@ class AdminService:
         current_user.full_name = user_data.full_name or current_user.full_name
         
         if avi_file:
-            ext = avi_file.filename.split(".")[-1]
-            file_name = f"{uuid4()}.{ext}"
-            upload_dir = os.path.join(settings.MEDIA_DIR, "admin", "avi")
-            os.makedirs(upload_dir, exist_ok = True)
-            filepath = os.path.join(upload_dir, file_name)
+            # ext = avi_file.filename.split(".")[-1]
+            # file_name = f"{uuid4()}.{ext}"
+            upload_dir = os.path.join(settings.MEDIA_DIR, "admin")
+            # os.makedirs(upload_dir, exist_ok = True)
+            # filepath = os.path.join(upload_dir, file_name)
 
-            with open(filepath, "wb") as buffer:
-                shutil.copyfileobj(avi_file.file, buffer)
+            # with open(filepath, "wb") as buffer:
+            #     shutil.copyfileobj(avi_file.file, buffer)
 
-            current_user.avi = f"/static/admin/avi/{file_name}"
+            current_user.avi = save_file(avi_file, upload_dir)
         self.db.commit()
         self.db.refresh(current_user)
 

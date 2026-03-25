@@ -2,9 +2,10 @@ import uuid, os, shutil
 from sqlalchemy.orm import Session
 from fastapi import UploadFile, HTTPException, status
 from datetime import datetime
-from app.models.event_models import Events
+from app.models.event_models import Event
 from app.services.user import UserService
 from app.schemas.event_schema import EventUpdate, EventResponse, EventBase, EventUpdateResponse
+from app.utils.file_upload import save_file
 from config import settings
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
@@ -45,19 +46,10 @@ class EventService:
 
     def upload_file(self, banner_file: UploadFile = None, request: Request = None) -> Optional[str]:
         if banner_file:
-            ext = banner_file.filename.split(".")[-1]
-            file_name = f"{uuid.uuid4()}.{ext}"
+
             upload_dir = os.path.join(settings.MEDIA_DIR, "event_banners")
-            os.makedirs(upload_dir, exist_ok=True)
-            filepath = os.path.join(upload_dir, file_name)
-
-            with open(filepath, "wb") as buffer:
-                shutil.copyfileobj(banner_file.file, buffer)
-
-            if request:
-                return str(request.base_url) + f"static/event_banners/{file_name}"
-            else:
-                return f"/static/event_banners/{file_name}"
+            return save_file(banner_file, upload_dir)
+        
         return None
     def GenerateResponse(self, status_code:int, message:str, data:Optional[dict] = None):
         return JSONResponse(
@@ -71,21 +63,12 @@ class EventService:
         organizer = self.get_event_manager(token=token, db=self.db)
         banner_url = None
         if banner_file:
-            ext = banner_file.filename.split(".")[-1]
-            file_name = f"{uuid.uuid4()}.{ext}"
+
             upload_dir = os.path.join(settings.MEDIA_DIR, "event_banners")
-            os.makedirs(upload_dir, exist_ok=True)
-            filepath = os.path.join(upload_dir, file_name)
 
-            with open(filepath, "wb") as buffer:
-                shutil.copyfileobj(banner_file.file, buffer)
-
-            if request:
-                banner_url = str(request.base_url) + f"static/event_banners/{file_name}"
-            else:
-                banner_url = f"/static/event_banners/{file_name}"
-
-        new_event = Events(
+            banner_url = save_file(banner_file, upload_dir)
+        
+        new_event = Event(
             id=uuid.uuid4(),
             name=event_data.name,
             description=event_data.description,
@@ -101,7 +84,7 @@ class EventService:
         return {
             "status_code": status.HTTP_201_CREATED,
             "message": "Event created successfully.",
-            "data": EventResponse.from_orm(new_event)
+            "data": EventResponse.model_validate(new_event)
         }
 
     def update_event(
@@ -114,8 +97,8 @@ class EventService:
     ):
         organizer = self.get_event_manager(token=token, db=self.db)
         event = (
-            self.db.query(Events)
-            .filter(Events.id == event_id, Events.organizer_id == organizer.id)
+            self.db.query(Event)
+            .filter(Event.id == event_id, Event.organizer_id == organizer.id)
             .first()
         )
 
@@ -147,14 +130,14 @@ class EventService:
         return {
             "status_code": status.HTTP_200_OK,
             "message": "Event updated successfully.",
-            "data": EventResponse.from_orm(event)
+            "data": EventResponse.model_validate(event)
         }
 
     def get_single_event(self, event_id: str, token: str):
         organizer = self.get_event_manager(token=token, db=self.db)
         event = (
-            self.db.query(Events)
-            .filter(Events.id == event_id, Events.organizer_id == organizer.id)
+            self.db.query(Event)
+            .filter(Event.id == event_id, Event.organizer_id == organizer.id)
             .first()
         )
 
@@ -164,7 +147,7 @@ class EventService:
                 message="Event not found."
             )
 
-        event_data = EventResponse.from_orm(event)
+        event_data = EventResponse.model_validate(event)
 
         return self.GenerateResponse(
             status_code=status.HTTP_200_OK,
@@ -175,8 +158,8 @@ class EventService:
     def get_events(self, token: str):
         organizer = self.get_event_manager(token=token, db=self.db)
         events = (
-            self.db.query(Events)
-            .filter(Events.organizer_id == organizer.id)
+            self.db.query(Event)
+            .filter(Event.organizer_id == organizer.id)
             .all()
         )
 
@@ -186,7 +169,7 @@ class EventService:
                 message="No events found."
             )
 
-        events_data = [EventResponse.from_orm(event) for event in events]
+        events_data = [EventResponse.model_validate(event) for event in events]
         return self.GenerateResponse(
             status_code=status.HTTP_200_OK,
             message="Events retrieved successfully.",
@@ -196,8 +179,8 @@ class EventService:
     def delete_event(self, event_id: str, token: str):
         organizer = self.get_event_manager(token=token, db=self.db)
         event = (
-            self.db.query(Events)
-            .filter(Events.id == event_id, Events.organizer_id == organizer.id)
+            self.db.query(Event)
+            .filter(Event.id == event_id, Event.organizer_id == organizer.id)
             .first()
         )
 
@@ -219,8 +202,8 @@ class EventService:
     def delete_all_events(self, token: str):
         organizer = self.get_event_manager(token=token, db=self.db)
         events = (
-            self.db.query(Events)
-            .filter(Events.organizer_id == organizer.id)
+            self.db.query(Event)
+            .filter(Event.organizer_id == organizer.id)
             .all()
         )
 

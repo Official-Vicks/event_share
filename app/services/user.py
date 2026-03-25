@@ -5,6 +5,7 @@ from fastapi import HTTPException, status
 from datetime import datetime, timedelta
 from config import settings
 from app.models.user_models import User, BlacklistedToken
+from app.utils.file_upload import save_file
 from jwt import (create_access_token, create_refresh_token,
                  decode_access_token, decode_refresh_token,
                  is_token_blacklisted, blacklist_token)
@@ -36,7 +37,7 @@ class UserService:
         )
     def get_current_user(self, token: str, db: Session):
         payload = decode_access_token(token, db)
-        user_id = payload.get("sub")
+        user_id = uuid.UUID(payload.get("sub"))
 
         if user_id is None:
             raise HTTPException(
@@ -62,7 +63,7 @@ class UserService:
                 data=None
             )
 
-        profile_data = ProfileResponse.from_orm(current_user).dict()
+        profile_data = ProfileResponse.model_validate(current_user).model_dump()
 
         return self.GenerateResponse(
             status_code=status.HTTP_200_OK,
@@ -71,44 +72,61 @@ class UserService:
         )
     
     def register_user(self, user_data: UserRegister):
-        existing_user = self.db.query(User).filter_by(email=user_data.email).first()
-        existing_username = self.db.query(User).filter_by(username=user_data.username).first()
-        if existing_username:
-            return self.GenerateResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                message="Username already taken."
-            )
-        if existing_user:
-            return self.GenerateResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                message="User with this email already exists."
-            )
-        user_id=str(uuid.uuid4())
-        new_user = User(
-            id=user_id,
-            username=user_data.username,
-            email=user_data.email,
-            role=user_data.role,
-            hashed_password=hash_password(user_data.password)
-        )
-        self.db.add(new_user)
-        self.db.commit()
-        self.db.refresh(new_user)
+        try:
+            existing_user = self.db.query(User).filter_by(email=user_data.email).first()
+            existing_username = self.db.query(User).filter_by(username=user_data.username).first()
+            if existing_username:
+                return self.GenerateResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    message="Username already taken."
+                )
+            if existing_user:
+                return self.GenerateResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    message="User with this email already exists."
+                )
 
-        access_token = create_access_token({"sub": user_id})
-        refresh_token = create_refresh_token({"sub": user_id})
+            user_id = uuid.uuid4()
+            new_user = User(
+                id=user_id,
+                username=user_data.username,
+                email=user_data.email,
+                role=user_data.role,
+                hashed_password=hash_password(user_data.password)
+            )
+            self.db.add(new_user)
+            self.db.commit()
+            self.db.refresh(new_user)
 
-        return self.GenerateResponse(
-            status_code=status.HTTP_201_CREATED,
-            message="User created successfully.",
-            data={
-                "user_id": new_user.id,
-                "username": new_user.username,
-                "role": new_user.role,
-                "access_token": access_token,
-                "refresh_token": refresh_token,
+            access_token = create_access_token({"sub": str(user_id)})
+            refresh_token = create_refresh_token({"sub": str(user_id)})
+
+            return self.GenerateResponse(
+                status_code=status.HTTP_201_CREATED,
+                message="User created successfully.",
+                data={
+                    "user_id": new_user.id,
+                    "username": new_user.username,
+                    "role": new_user.role,
+                    "access_token": access_token,
+                    "refresh_token": refresh_token,
                 }
-        )
+            )
+
+        except Exception as e:
+            # print traceback to console for debugging
+            import traceback, sys
+            traceback.print_exc(file=sys.stdout)
+            # Rollback DB if something failed during commit
+            try:
+                self.db.rollback()
+            except Exception:
+                pass
+            # Return a controlled JSON response containing the error message (useful now while debugging)
+            return self.GenerateResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                message=f"Server error during registration: {str(e)}"
+            )
 
     def login_user(self, user_data: UserLogin):
         user = self.db.query(User).filter_by(email=user_data.email).first()
@@ -153,22 +171,15 @@ class UserService:
         current_user.full_name = user_data.full_name or current_user.full_name
 
         if avi_file:
-            ext = avi_file.filename.split(".")[-1]
-            file_name = f"{uuid4()}.{ext}"
+
             upload_dir = os.path.join(settings.MEDIA_DIR, "avi")
-            os.makedirs(upload_dir, exist_ok=True)
-            filepath = os.path.join(upload_dir, file_name)
 
-            avi_file.file.seek(0) 
-            with open(filepath, "wb") as buffer:
-                shutil.copyfileobj(avi_file.file, buffer)
-
-            current_user.avi = f"/static/avi/{file_name}"
+            current_user.avi = save_file(avi_file, upload_dir)
 
         self.db.commit()
         self.db.refresh(current_user)
 
-        # ✅ Return exactly what ProfileResponseWrapper expects
+        # Return exactly what ProfileResponseWrapper expects
         return self.GenerateResponse(
                 status_code=status.HTTP_200_OK,
                 message="Profile updated successfully.",
